@@ -1,0 +1,31 @@
+{
+	"manifest_version": 3,
+	"name": "YouTube Translate Extension",
+	"version": "1.0",
+	"description": "Translates YouTube video subtitles using a backend API.",
+	"permissions": ["activeTab", "scripting", "tabs", "webNavigation"],
+	"background": {
+		"service_worker": "background.js"
+	},
+	"content_scripts": [
+		{
+			"matches": ["https://www.youtube.com/*"],
+			"js": ["content.js"]
+		}
+	],
+	"icons": {
+		"16": "icons/a-16.png",
+		"32": "icons/a-32.png",
+		"48": "icons/a-48.png",
+		"128": "icons/a-128.png"
+	},
+	"action": {
+		"default_popup": "popup.html",
+		"default_icon": {
+			"16": "icons/a-16.png",
+			"32": "icons/a-32.png",
+			"48": "icons/a-48.png",
+			"128": "icons/a-128.png"
+		}
+	}
+}
