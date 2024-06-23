@@ -12,7 +12,6 @@ let handleTimeUpdate;
 let videoElement;
 
 function hasChineseCharacter(text) {
-	// 使用正则表达式检查文本中是否包含汉字
 	return /[\u4e00-\u9fff]/.test(text);
 }
 
