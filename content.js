@@ -1,15 +1,8 @@
-let lastVideoElement = null;
-let throttleTimeout = null;
-let lastEndTime = 0;
-
-let captionWindow;
-let captionContainer;
-let innerCaptionWindow;
-let captionsText;
-let kanaLine;
-
-let handleTimeUpdate;
 let videoElement;
+let captionWindow;
+let kanaLine;
+let currentSubtitles;
+let lastEndTime = 0;
 
 function hasChineseCharacter(text) {
 	return /[\u4e00-\u9fff]/.test(text);
@@ -27,46 +20,48 @@ function convertToRuby(data) {
 	return result;
 }
 
+function throttle(fn, wait) {
+	let lastTime = 0;
+	return function (...args) {
+		const now = new Date().getTime();
+		if (now - lastTime >= wait) {
+			lastTime = now;
+			fn.apply(this, args);
+		}
+	};
+}
+
 function getVideoId(url) {
 	const urlParams = new URLSearchParams(new URL(url).search);
 	return urlParams.get("v");
 }
 
-function fetchTranslatedSubtitles(videoId) {
-	fetch(
-		`https://yt-kana-api.vercel.app/translate_subtitles?video_id=${videoId}`
-	)
-		.then((response) => response.json())
-		.then((data) => {
-			// console.log(data);
-			if (data?.length) {
-				setupSubtitleReplacement(data);
-			}
-		})
-		.catch((error) =>
-			console.error("Error fetching translated subtitles:", error)
-		);
-}
+function createSubtitleContainer() {
+	if (captionWindow) return;
+	captionWindow = document.createElement("div");
+	captionWindow.id = "yt-kana-caption-window";
 
-function setupSubtitleReplacement(translatedSubtitles) {
-	videoElement = document.querySelector("video");
-	if (!videoElement) {
-		console.error("No video element found.");
-		return;
-	}
+	const captionContainer = document.createElement("div");
+	captionContainer.className = "yt-kana-caption-container";
 
-	const subtitleContainer = document.querySelector(
-		".ytp-caption-window-container"
-	);
-	if (!subtitleContainer) {
-		console.error("No subtitle container found.");
-		return;
-	}
+	const innerCaptionWindow = document.createElement("div");
+	innerCaptionWindow.className = "yt-kana-inner-caption-window";
 
-	if (!document.getElementById("yt-kana-caption-window")) {
-		const style = document.createElement("style");
+	const captionsText = document.createElement("div");
+	captionsText.className = "yt-captions-text";
 
-		style.textContent = `
+	kanaLine = document.createElement("div");
+	kanaLine.className = "yt-kana-line";
+	kanaLine.innerHTML = "";
+
+	captionsText.appendChild(kanaLine);
+	innerCaptionWindow.appendChild(captionsText);
+	captionContainer.appendChild(innerCaptionWindow);
+	captionWindow.appendChild(captionContainer);
+
+	const style = document.createElement("style");
+	style.id = "yt-kana-caption-style";
+	style.textContent = `
     #yt-kana-caption-window {
         position: absolute;
         width: 100%;
@@ -113,112 +108,94 @@ function setupSubtitleReplacement(translatedSubtitles) {
         line-height: 1.5;
         align-items: center;
     }
+		.yt-kana-hide {display: none;}
 		.caption-window {display: none;}
 `;
 
-		document.head.appendChild(style);
+	document.head.appendChild(style);
+	document.querySelector(".html5-video-player")?.appendChild(captionWindow);
+}
 
-		captionWindow = document.createElement("div");
-		captionWindow.id = "yt-kana-caption-window";
-
-		captionContainer = document.createElement("div");
-		captionContainer.className = "yt-kana-caption-container";
-
-		innerCaptionWindow = document.createElement("div");
-		innerCaptionWindow.className = "yt-kana-inner-caption-window";
-
-		captionsText = document.createElement("div");
-		captionsText.className = "yt-captions-text";
-
-		kanaLine = document.createElement("div");
-		kanaLine.className = "yt-kana-line";
-		kanaLine.innerHTML = "";
-
-		captionsText.appendChild(kanaLine);
-		innerCaptionWindow.appendChild(captionsText);
-		captionContainer.appendChild(innerCaptionWindow);
-		captionWindow.appendChild(captionContainer);
-
-		document.querySelector(".html5-video-player")?.appendChild(captionWindow);
-	}
-
-	const showSubtitle = () => {
-		const currentTime = videoElement.currentTime;
-		if (currentTime < lastEndTime) return;
-		translatedSubtitles.forEach((subtitle) => {
-			if (
-				currentTime >= lastEndTime &&
-				currentTime >= subtitle.start &&
-				currentTime <= subtitle.start + subtitle.duration
-			) {
-				lastEndTime = subtitle.start + subtitle.duration;
-				kanaLine.innerHTML = convertToRuby(subtitle.token);
-			}
-		});
-	};
-
-	// Throttle the timeupdate event to reduce the frequency of calls
-	handleTimeUpdate = function () {
-		if (!throttleTimeout) {
-			throttleTimeout = setTimeout(() => {
-				throttleTimeout = null;
-				showSubtitle();
-			}, 400);
+async function fetchTranslatedSubtitles(videoId) {
+	try {
+		const response = await fetch(
+			`https://yt-kana-api.vercel.app/translate_subtitles?video_id=${videoId}`
+		);
+		const data = await response.json();
+		if (data?.length) {
+			currentSubtitles = data;
+			console.log("currentSubtitles ===", currentSubtitles);
+			setupSubtitle();
 		}
-	};
+	} catch (error) {
+		console.error("Error fetching translated subtitles:", error);
+	}
+}
 
-	// Remove previous event listener if it exists
-	removeSubtitleReplacement();
+function updateCaptions() {
+	if (
+		!currentSubtitles ||
+		!currentSubtitles.length ||
+		!videoElement ||
+		!kanaLine
+	) {
+		return;
+	}
+	const currentTime = videoElement.currentTime;
+	console.log("currentTime ===", currentTime);
+	if (currentTime < lastEndTime) {
+		return;
+	}
+	const currentSubtitle = currentSubtitles.find((subtitle) => {
+		return (
+			currentTime >= subtitle.start &&
+			currentTime <= subtitle.start + subtitle.duration
+		);
+	});
+	console.log("currentSubtitle ===", currentSubtitle);
+	if (currentSubtitle) {
+		lastEndTime = currentSubtitle.start + currentSubtitle.duration;
+		kanaLine.innerHTML = convertToRuby(currentSubtitle.token);
+	}
+}
 
-	// Event listener for updating subtitles based on the video's current time
+const handleTimeUpdate = throttle(updateCaptions, 1000);
+function handleVideoEnded() {
+	kanaLine.innerHTML = "";
+	kanaLine.classList.add("yt-kana-hide");
+	lastEndTime = 0;
+	removeListener();
+}
+
+function setupSubtitle() {
+	createSubtitleContainer();
+	kanaLine.classList.remove("yt-kana-hide");
 	videoElement.addEventListener("timeupdate", handleTimeUpdate);
 	videoElement.addEventListener("ended", handleVideoEnded);
-	lastVideoElement = videoElement;
 }
 
-// Handle video ended event
-function handleVideoEnded() {
-	// console.log("Video has ended");
-	removeSubtitleReplacement();
-	init();
-}
-
-function removeSubtitleReplacement() {
-	if (lastVideoElement) {
-		lastVideoElement.removeEventListener("timeupdate", handleTimeUpdate);
-		lastVideoElement.removeEventListener("ended", handleVideoEnded);
-	}
-}
-
-function init() {
-	lastEndTime = 0;
-	// Remove the subtitles when the video ends
-	const kanaLine = document.querySelector(".yt-kana-line");
-	if (kanaLine) {
-		kanaLine.innerHTML = "";
-	}
-	if (throttleTimeout) {
-		clearTimeout(throttleTimeout);
-		throttleTimeout = null;
-	}
-}
-
-function initialize() {
-	const videoId = getVideoId(window.location.href);
-	if (videoId) {
-		// console.log("Video ID:", videoId);
-		fetchTranslatedSubtitles(videoId);
-	}
+function removeListener() {
+	console.log("removeListener ===");
+	videoElement?.removeEventListener("timeupdate", handleTimeUpdate);
+	videoElement?.removeEventListener("ended", handleVideoEnded);
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+	console.log("message ===", message);
 	if (message.action === "urlChanged") {
-		// console.log("URL changed to:", message.url);
-		removeSubtitleReplacement();
-		init();
-		initialize();
+		console.log("URL changed to:", message.url);
+		videoElement = document.querySelector("video");
+		if (!videoElement) {
+			console.error("No video element found.");
+			return;
+		}
+		removeListener();
+
+		const videoId = getVideoId(message.url);
+		if (videoId) {
+			fetchTranslatedSubtitles(videoId);
+		}
 	}
 	sendResponse({ received: true });
-	// async response
 	return true;
 });
