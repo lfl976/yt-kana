@@ -3,6 +3,7 @@ let captionWindow;
 let kanaLine;
 let currentSubtitles;
 let lastEndTime = 0;
+let url;
 
 function hasChineseCharacter(text) {
 	return /[\u4e00-\u9fff]/.test(text);
@@ -142,7 +143,7 @@ function updateCaptions() {
 		return;
 	}
 	const currentTime = videoElement.currentTime;
-	console.log("currentTime ===", currentTime);
+	// console.log("currentTime ===", currentTime);
 	if (currentTime < lastEndTime) {
 		return;
 	}
@@ -152,7 +153,7 @@ function updateCaptions() {
 			currentTime <= subtitle.start + subtitle.duration
 		);
 	});
-	console.log("currentSubtitle ===", currentSubtitle);
+	// console.log("currentSubtitle ===", currentSubtitle);
 	if (currentSubtitle) {
 		lastEndTime = currentSubtitle.start + currentSubtitle.duration;
 		kanaLine.innerHTML = convertToRuby(currentSubtitle.token);
@@ -161,10 +162,29 @@ function updateCaptions() {
 
 const handleTimeUpdate = throttle(updateCaptions, 1000);
 function handleVideoEnded() {
-	kanaLine.innerHTML = "";
-	kanaLine.classList.add("yt-kana-hide");
+	reset();
+}
+
+function reset() {
+	if (kanaLine) {
+		kanaLine.innerHTML = "";
+		kanaLine.classList.add("yt-kana-hide");
+	}
 	lastEndTime = 0;
 	removeListener();
+}
+
+function removeSubtitleContainer() {
+	const style = document.getElementById("yt-kana-caption-style");
+	const theWindow = document.getElementById("yt-kana-caption-window");
+	reset();
+	if (theWindow) {
+		theWindow.remove();
+		captionWindow = null;
+	}
+	if (style) {
+		style.remove();
+	}
 }
 
 function setupSubtitle() {
@@ -180,20 +200,40 @@ function removeListener() {
 	videoElement?.removeEventListener("ended", handleVideoEnded);
 }
 
+function init() {
+	videoElement = document.querySelector("video");
+	if (!videoElement) {
+		console.error("No video element found.");
+		return;
+	}
+	reset();
+	const videoId = getVideoId(url);
+	if (videoId) {
+		if (
+			document
+				.querySelector(".ytp-subtitles-button")
+				.getAttribute("aria-pressed") === "false"
+		)
+			return;
+		fetchTranslatedSubtitles(videoId);
+	}
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 	console.log("message ===", message);
 	if (message.action === "urlChanged") {
 		console.log("URL changed to:", message.url);
-		videoElement = document.querySelector("video");
-		if (!videoElement) {
-			console.error("No video element found.");
-			return;
-		}
-		removeListener();
-
-		const videoId = getVideoId(message.url);
-		if (videoId) {
-			fetchTranslatedSubtitles(videoId);
+		url = message.url;
+		init();
+	}
+	if (message.action === "off") {
+		removeSubtitleContainer();
+	}
+	if (message.action === "on") {
+		if (currentSubtitles) {
+			setupSubtitle();
+		} else {
+			init();
 		}
 	}
 	sendResponse({ received: true });

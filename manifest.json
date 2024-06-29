@@ -1,8 +1,8 @@
 {
 	"manifest_version": 3,
-	"name": "YouTube Translate Extension",
+	"name": "YouTube Kana",
 	"version": "1.0",
-	"description": "Translates YouTube video subtitles using a backend API.",
+	"description": "Add phonetic annotations (hiragana) to Japanese subtitles for YouTube.",
 	"permissions": ["tabs"],
 	"background": {
 		"service_worker": "background.js"
