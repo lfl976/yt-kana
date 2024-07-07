@@ -4,4 +4,4 @@ A Chrome extension for annotating Japanese subtitles for YouTube
 
 ## Demo
 
-![demo](./demo.png)
+![demo](./screenshot/demo.png)

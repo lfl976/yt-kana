@@ -191,9 +191,9 @@ function updateCaptions() {
 		return;
 	}
 	const currentTime = videoElement.currentTime;
-	if (currentTime < lastEndTime) {
-		return;
-	}
+	// if (currentTime < lastEndTime) {
+	// 	return;
+	// }
 	const currentSubtitle = currentSubtitles.find((subtitle) => {
 		return (
 			currentTime >= subtitle.start &&
