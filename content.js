@@ -4,6 +4,48 @@ let kanaLine;
 let currentSubtitles;
 let lastEndTime = 0;
 let url;
+let observer;
+
+function sleep(ms) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getCachedSubtitles(videoId) {
+	const data = await chrome.storage.local.get(["cacheData"]);
+	return data?.cacheData?.[videoId];
+}
+
+function addData(newKey, newData) {
+	chrome.storage.local.get(["cacheData"], function (result) {
+		let cacheData = result.cacheData || {};
+
+		// 如果已经存储了5条数据，删除最旧的一条
+		if (Object.keys(cacheData).length >= 5) {
+			let oldestKey = null;
+			let oldestTime = Infinity;
+
+			for (let key in cacheData) {
+				if (cacheData[key].time < oldestTime) {
+					oldestTime = cacheData[key].time;
+					oldestKey = key;
+				}
+			}
+
+			if (oldestKey) {
+				delete cacheData[oldestKey]; // 删除最旧的一条数据
+			}
+		}
+
+		// 添加新数据
+		cacheData[newKey] = newData;
+
+		// 保存更新后的数据
+		chrome.storage.local.set({ cacheData: cacheData }, function () {});
+	});
+}
+
+// 示例：添加一条新数据
+// addData('xx' + Date.now(), { time: Date.now(), value: 'new data' });
 
 function hasChineseCharacter(text) {
 	return /[\u4e00-\u9fff]/.test(text);
@@ -52,7 +94,7 @@ function createSubtitleContainer() {
 	captionsText.className = "yt-captions-text";
 
 	kanaLine = document.createElement("div");
-	kanaLine.className = "yt-kana-line";
+	kanaLine.className = "yt-kana-line yt-kana-hide";
 	kanaLine.innerHTML = "";
 
 	captionsText.appendChild(kanaLine);
@@ -118,6 +160,12 @@ function createSubtitleContainer() {
 }
 
 async function fetchTranslatedSubtitles(videoId) {
+	const cachedData = await getCachedSubtitles(videoId);
+	if (cachedData) {
+		currentSubtitles = cachedData.value;
+		setupSubtitle();
+		return;
+	}
 	try {
 		const response = await fetch(
 			`https://yt-kana-api.vercel.app/translate_subtitles?video_id=${videoId}`
@@ -125,7 +173,7 @@ async function fetchTranslatedSubtitles(videoId) {
 		const data = await response.json();
 		if (data?.length) {
 			currentSubtitles = data;
-			console.log("currentSubtitles ===", currentSubtitles);
+			addData(videoId, { time: Date.now(), value: data });
 			setupSubtitle();
 		}
 	} catch (error) {
@@ -143,7 +191,6 @@ function updateCaptions() {
 		return;
 	}
 	const currentTime = videoElement.currentTime;
-	// console.log("currentTime ===", currentTime);
 	if (currentTime < lastEndTime) {
 		return;
 	}
@@ -153,8 +200,8 @@ function updateCaptions() {
 			currentTime <= subtitle.start + subtitle.duration
 		);
 	});
-	// console.log("currentSubtitle ===", currentSubtitle);
 	if (currentSubtitle) {
+		kanaLine.classList.remove("yt-kana-hide");
 		lastEndTime = currentSubtitle.start + currentSubtitle.duration;
 		kanaLine.innerHTML = convertToRuby(currentSubtitle.token);
 	}
@@ -172,6 +219,7 @@ function reset() {
 	}
 	lastEndTime = 0;
 	removeListener();
+	currentSubtitles = null;
 }
 
 function removeSubtitleContainer() {
@@ -189,13 +237,11 @@ function removeSubtitleContainer() {
 
 function setupSubtitle() {
 	createSubtitleContainer();
-	kanaLine.classList.remove("yt-kana-hide");
 	videoElement.addEventListener("timeupdate", handleTimeUpdate);
 	videoElement.addEventListener("ended", handleVideoEnded);
 }
 
 function removeListener() {
-	console.log("removeListener ===");
 	videoElement?.removeEventListener("timeupdate", handleTimeUpdate);
 	videoElement?.removeEventListener("ended", handleVideoEnded);
 }
@@ -207,35 +253,57 @@ function init() {
 		return;
 	}
 	reset();
-	const videoId = getVideoId(url);
+	const videoId = getVideoId(location.href);
 	if (videoId) {
-		if (
-			document
-				.querySelector(".ytp-subtitles-button")
-				.getAttribute("aria-pressed") === "false"
-		)
-			return;
 		fetchTranslatedSubtitles(videoId);
 	}
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-	console.log("message ===", message);
-	if (message.action === "urlChanged") {
-		console.log("URL changed to:", message.url);
-		url = message.url;
-		init();
-	}
 	if (message.action === "off") {
 		removeSubtitleContainer();
+		if (observer) {
+			observer.disconnect();
+		}
 	}
 	if (message.action === "on") {
 		if (currentSubtitles) {
 			setupSubtitle();
 		} else {
 			init();
+			start();
 		}
 	}
 	sendResponse({ received: true });
 	return true;
 });
+
+function callback(mutationList, observer) {
+	init();
+}
+
+chrome.storage.local.get("toggle", function (result) {
+	if (result.toggle === "on") {
+		init();
+		start();
+	}
+});
+
+async function start() {
+	// wait for element to be loaded
+	await sleep(3000);
+	const targetNode = document.querySelector(
+		"h1.ytd-watch-metadata yt-formatted-string"
+	);
+
+	const observerOptions = {
+		childList: true,
+		attributes: false,
+		subtree: true,
+	};
+
+	if (!observer) {
+		observer = new MutationObserver(callback);
+	}
+	observer.observe(targetNode, observerOptions);
+}

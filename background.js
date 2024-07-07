@@ -8,12 +8,12 @@ function sendMessageToTab(tabId, message) {
 	});
 }
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-	if (changeInfo.status === "complete" && tab.url !== lastUrl) {
-		lastUrl = tab.url;
-		sendMessageToTab(tabId, {
-			action: "urlChanged",
-			url: tab.url,
-		});
-	}
-});
+// chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+// 	if (changeInfo.status === "complete" && tab.url !== lastUrl) {
+// 		lastUrl = tab.url;
+// 		sendMessageToTab(tabId, {
+// 			action: "urlChanged",
+// 			url: tab.url,
+// 		});
+// 	}
+// });

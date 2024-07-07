@@ -3,7 +3,7 @@
 	"name": "YouTube Kana",
 	"version": "1.0",
 	"description": "Add phonetic annotations (hiragana) to Japanese subtitles for YouTube.",
-	"permissions": ["tabs"],
+	"permissions": ["tabs", "storage"],
 	"background": {
 		"service_worker": "background.js"
 	},

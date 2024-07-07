@@ -2,6 +2,12 @@ document.addEventListener("DOMContentLoaded", function () {
 	console.log("Popup script loaded.");
 });
 
+chrome.storage.local.get("toggle", function (result) {
+	if (result.toggle === "off") {
+		document.getElementById("toggle").checked = false;
+	}
+});
+
 document.getElementById("toggle").addEventListener("click", function (e) {
 	const action = e.target.checked ? "on" : "off";
 
@@ -11,8 +17,10 @@ document.getElementById("toggle").addEventListener("click", function (e) {
 			if (tab.url && tab.url.includes("https://www.youtube.com/watch")) {
 				chrome.tabs.update(tab.id, { active: true });
 				chrome.tabs.sendMessage(tab.id, { action }, (response) => {
+					chrome.storage.local.set({ toggle: action }, function () {});
+
 					if (chrome.runtime.lastError) {
-						console.log("Error sending message:", chrome.runtime.lastError);
+						// console.log("Error sending message:", chrome.runtime.lastError);
 					}
 				});
 			}
